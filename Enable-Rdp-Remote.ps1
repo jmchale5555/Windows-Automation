@@ -10,7 +10,7 @@ if ($ComputerNames -contains "/h" -or $ComputerNames -contains "/help") {
     Write-Host "This command enables Remote Desktop on remote hosts" -ForegroundColor White
     Write-Host "Requires 1 to 5 hostnames as arguments" -ForegroundColor White
     Write-Host "Example" -ForegroundColor White
-    Write-Host ".\Enable-RDP.ps1 tlab-r11pc1 tlab-r11pc2" -ForegroundColor Yellow
+    Write-Host ".\Enable-RDP.ps1 host1 host2" -ForegroundColor Yellow
     Write-Host ""
     exit 0
 }
