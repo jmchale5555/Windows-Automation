@@ -4,16 +4,16 @@
 
 .DESCRIPTION
     Uses Get-Recipient to efficiently find groups where you're already a member,
-    then filters for SendAs/SendOnBehalf groups. Much faster than scanning all groups.
+    then filters for groups containing arrowEEdot in the DisplayName.
 
 .PARAMETER UserPrincipalName
-    The email address of the user running the script.
+    The azure user@domain.name.whatever of the user running the script.
 
 .PARAMETER DryRun
     If specified, simulates actions without making changes.
 
 .EXAMPLE
-    .\Manage-Dist-List-Optimized.ps1 -UserPrincipalName "j.bloggs@domain.com" -Verbose
+    .\Manage-Mailbox.ps1 -UserPrincipalName "j.bloggs@domain.com"
 #>
 
 param (
