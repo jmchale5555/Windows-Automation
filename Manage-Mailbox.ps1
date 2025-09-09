@@ -153,7 +153,7 @@ function Search-Users($searchTerm) {
 }
 
 function Prompt-Action {
-    Write-Host "`n" + "="*50 -ForegroundColor Magenta
+    Write-Host "`n" + "=========================================================================" -ForegroundColor Magenta
     Write-Host "Choose an action:" -ForegroundColor Cyan
     Write-Host "[1] Add member to a group"
     Write-Host "[2] Remove member from a group"
