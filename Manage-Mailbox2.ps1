@@ -63,7 +63,9 @@ function Get-ManagedGroupsByMembership {
         
         Write-Verbose "Found $($userGroups.Count) groups where user is a member"
 
-        # Filter for groups starting with arrowEEdot
+        # Filter for groups starting with arrowEEdot and collect patterns for Owners groups
+        $ownerGroupBases = @()
+        
         foreach ($group in $userGroups) {
             $emailMatch = $group.DisplayName -like ">EE.*"
             
@@ -71,8 +73,55 @@ function Get-ManagedGroupsByMembership {
                 Write-Verbose "Matched group: $($group.DisplayName)"
                 Write-Host "Found manageable group: $($group.DisplayName)" -ForegroundColor Green
                 $matchingGroups += $group
+                
+                # Check if this is an Owners group and create patterns for related groups
+                if ($group.DisplayName -like ">EE.*.Owners.*") {
+                    # Replace .Owners. with SendAs and SendOnBehalf to create search patterns
+                    $sendAsPattern = $group.DisplayName -replace '\.Owners\.', '.SendAs.'
+                    $sendOnBehalfPattern = $group.DisplayName -replace '\.Owners\.', '.SendOnBehalf.'
+                    $ownerGroupBases += @{
+                        'SendAs' = $sendAsPattern
+                        'SendOnBehalf' = $sendOnBehalfPattern
+                    }
+                    Write-Verbose "Found owner group, will search for: $sendAsPattern and $sendOnBehalfPattern"
+                }
             } else {
                 Write-Verbose "Skipping group $($group.DisplayName) - doesn't match EE filter"
+            }
+        }
+
+        # Now find the corresponding SendAs and SendOnBehalf groups for each owner group
+        if ($ownerGroupBases.Count -gt 0) {
+            Write-Verbose "Looking for related SendAs and SendOnBehalf groups for $($ownerGroupBases.Count) owner groups..."
+            
+            foreach ($groupPatterns in $ownerGroupBases) {
+                Write-Verbose "Searching for related groups: $($groupPatterns.SendAs) and $($groupPatterns.SendOnBehalf)"
+                
+                # Search for SendAs group
+                try {
+                    $sendAsGroup = Get-DistributionGroup -Identity $groupPatterns.SendAs -RecipientTypeDetails MailUniversalSecurityGroup -ErrorAction SilentlyContinue
+                    if ($sendAsGroup) {
+                        Write-Host "Found related SendAs group: $($sendAsGroup.DisplayName)" -ForegroundColor Green
+                        $matchingGroups += $sendAsGroup
+                    } else {
+                        Write-Verbose "SendAs group $($groupPatterns.SendAs) not found"
+                    }
+                } catch {
+                    Write-Verbose "SendAs group $($groupPatterns.SendAs) not found or not accessible: $_"
+                }
+                
+                # Search for SendOnBehalf group
+                try {
+                    $sendOnBehalfGroup = Get-DistributionGroup -Identity $groupPatterns.SendOnBehalf -RecipientTypeDetails MailUniversalSecurityGroup -ErrorAction SilentlyContinue
+                    if ($sendOnBehalfGroup) {
+                        Write-Host "Found related SendOnBehalf group: $($sendOnBehalfGroup.DisplayName)" -ForegroundColor Green
+                        $matchingGroups += $sendOnBehalfGroup
+                    } else {
+                        Write-Verbose "SendOnBehalf group $($groupPatterns.SendOnBehalf) not found"
+                    }
+                } catch {
+                    Write-Verbose "SendOnBehalf group $($groupPatterns.SendOnBehalf) not found or not accessible: $_"
+                }
             }
         }
 
@@ -80,7 +129,7 @@ function Get-ManagedGroupsByMembership {
         Write-Warning "Direct group membership lookup failed: $_"
         Write-Verbose "Falling back to alternative method..."
         
-        # Fallback Method: Use slowww Graph API approach via Get-DistributionGroup
+        # Fallback Method: Use Graph API approach via Get-DistributionGroup
         try {
             $filteredGroups = @()
             
@@ -93,7 +142,9 @@ function Get-ManagedGroupsByMembership {
             
             Write-Verbose "Fallback method found $($filteredGroups.Count) potential groups to check"
 
-            # Now check membership only for these filtered groups
+            $ownerGroupBases = @()
+            
+            # Check membership only for these filtered groups
             foreach ($group in $filteredGroups) {
                 try {
                     Write-Verbose "Checking membership in $($group.DisplayName)..."
@@ -105,11 +156,39 @@ function Get-ManagedGroupsByMembership {
                         Write-Verbose "User $UserPrincipalName is a member of $($group.DisplayName)"
                         Write-Host "Found manageable group: $($group.DisplayName)" -ForegroundColor Green
                         $matchingGroups += $group
+                        
+                        # Check if this is an Owners group and create patterns for related groups
+                        if ($group.DisplayName -like ">EE.*.Owners.*") {
+                            # Replace .Owners. with SendAs and SendOnBehalf to create search patterns
+                            $sendAsPattern = $group.DisplayName -replace '\.Owners\.', '.SendAs.'
+                            $sendOnBehalfPattern = $group.DisplayName -replace '\.Owners\.', '.SendOnBehalf.'
+                            $ownerGroupBases += @{
+                                'SendAs' = $sendAsPattern
+                                'SendOnBehalf' = $sendOnBehalfPattern
+                            }
+                            Write-Verbose "Found owner group, will search for: $sendAsPattern and $sendOnBehalfPattern"
+                        }
                     }
                 } catch {
                     Write-Verbose "Skipping group $($group.DisplayName) due to error: $_"
                 }
             }
+            
+            # Find related SendAs and SendOnBehalf groups in fallback mode
+            if ($ownerGroupBases.Count -gt 0) {
+                foreach ($groupPatterns in $ownerGroupBases) {
+                    # Look for corresponding groups in the already retrieved list
+                    $relatedGroups = $filteredGroups | Where-Object { 
+                        $_.DisplayName -eq $groupPatterns.SendAs -or $_.DisplayName -eq $groupPatterns.SendOnBehalf
+                    }
+                    
+                    foreach ($relatedGroup in $relatedGroups) {
+                        Write-Host "Found related group: $($relatedGroup.DisplayName)" -ForegroundColor Green
+                        $matchingGroups += $relatedGroup
+                    }
+                }
+            }
+            
         } catch {
             Write-Error "Both direct lookup and fallback method failed: $_"
             return @()
@@ -153,7 +232,7 @@ function Search-Users($searchTerm) {
 }
 
 function Prompt-Action {
-    Write-Host "`n" + "=========================================================================" -ForegroundColor Magenta
+    Write-Host "=========================================================================" -ForegroundColor Magenta
     Write-Host "Choose an action:" -ForegroundColor Cyan
     Write-Host "[1] Add member to a group"
     Write-Host "[2] Remove member from a group"
